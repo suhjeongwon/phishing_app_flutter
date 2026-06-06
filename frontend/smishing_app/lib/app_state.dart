@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/user_profile.dart';
 import 'services/auth_api_service.dart';
 import 'services/token_storage.dart';
 
 final appState = AppState();
-
-// SharedPreferences 키 상수
-const _kGuestScanCount = 'guest_scan_count';
-const _kHasAgreedPermission = 'has_agreed_permission';
-const _kSmishingAlert = 'smishing_alert';
-const _kCautionAlert = 'caution_alert';
 
 class AppState extends ChangeNotifier {
   bool _isDarkMode = false;
@@ -27,7 +20,7 @@ class AppState extends ChangeNotifier {
   int _guestScanCount = 0;
   final int _maxGuestScanCount = 3;
 
-  bool _hasAgreedPermission = false;
+  bool _hasAgreedPermission = false; // 권한 동의 여부
 
   bool get isDarkMode => _isDarkMode;
   String get userName => _userName;
@@ -46,15 +39,6 @@ class AppState extends ChangeNotifier {
 
   bool get hasAgreedPermission => _hasAgreedPermission;
 
-  Future<void> loadPersistedState() async {
-    final prefs = await SharedPreferences.getInstance();
-    _guestScanCount = prefs.getInt(_kGuestScanCount) ?? 0;
-    _hasAgreedPermission = prefs.getBool(_kHasAgreedPermission) ?? false;
-    _smishingAlert = prefs.getBool(_kSmishingAlert) ?? true;
-    _cautionAlert = prefs.getBool(_kCautionAlert) ?? false;
-    notifyListeners();
-  }
-
   void toggleDarkMode() {
     _isDarkMode = !_isDarkMode;
     notifyListeners();
@@ -70,33 +54,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleSmishingAlert() async {
+  void toggleSmishingAlert() {
     _smishingAlert = !_smishingAlert;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kSmishingAlert, _smishingAlert);
     notifyListeners();
   }
-
-  void toggleCautionAlert() async {
-    _cautionAlert = !_cautionAlert;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kCautionAlert, _cautionAlert);
-    notifyListeners();
-  }
-
   Future<void> updateUserName(String name) async {
     final profile = await AuthApiService.updateMe(name: name);
     _applyUserProfile(profile, displayName: profile.name ?? name);
     notifyListeners();
   }
-
-  void _applyUserProfile(UserProfile profile, {String? displayName}) {
-    _userId = profile.id;
-    _userEmail = profile.email ?? '';
-    _userName = displayName ?? profile.name ?? _emailToDisplayName(_userEmail);
-    _isLoggedIn = true;
-    _guestScanCount = 0;
+  void toggleCautionAlert() {
+    _cautionAlert = !_cautionAlert;
+    notifyListeners();
   }
+
+void _applyUserProfile(UserProfile profile, {String? displayName}) {
+  _userId = profile.id;
+  _userEmail = profile.email ?? '';
+  _userName = displayName ??
+      profile.name ??
+      _emailToDisplayName(_userEmail);
+  _isLoggedIn = true;
+  _guestScanCount = 0;
+}
 
   String _emailToDisplayName(String email) {
     if (email.isEmpty) return '사용자';
@@ -105,13 +85,16 @@ class AppState extends ChangeNotifier {
     return email.substring(0, at);
   }
 
+  /// 앱 시작 시 저장된 JWT로 세션 복구 (/api/users/me).
   Future<bool> restoreSession() async {
     _isAuthLoading = true;
     notifyListeners();
 
     try {
       final token = await TokenStorage.readAccessToken();
-      if (token == null || token.isEmpty) return false;
+      if (token == null || token.isEmpty) {
+        return false;
+      }
 
       final profile = await AuthApiService.getMe();
       _applyUserProfile(profile);
@@ -126,6 +109,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// 로그인/회원가입 API 성공 후 세션 반영.
   void setAuthenticatedSession(UserProfile profile, {String? displayName}) {
     _applyUserProfile(profile, displayName: displayName);
     notifyListeners();
@@ -154,33 +138,25 @@ class AppState extends ChangeNotifier {
     _userEmail = '';
   }
 
-  void increaseGuestScan() async {
+  void increaseGuestScan() {
     if (!_isLoggedIn && _guestScanCount < _maxGuestScanCount) {
       _guestScanCount++;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_kGuestScanCount, _guestScanCount);
       notifyListeners();
     }
   }
 
-  void resetGuestScan() async {
+  void resetGuestScan() {
     _guestScanCount = 0;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kGuestScanCount, 0);
     notifyListeners();
   }
 
-  void agreePermission() async {
+  void agreePermission() {
     _hasAgreedPermission = true;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kHasAgreedPermission, true);
     notifyListeners();
   }
 
-  void resetPermission() async {
+  void resetPermission() {  // 테스트용 - 필요시 사용
     _hasAgreedPermission = false;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kHasAgreedPermission, false);
     notifyListeners();
   }
 }
