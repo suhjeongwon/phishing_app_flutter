@@ -4,7 +4,6 @@ import '../services/api_client.dart';
 import '../services/auth_api_service.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -22,9 +21,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _obscureConfirm = true;
   bool _agreeTerms = false;
   bool _isLoading = false;
- 
-  final _storage = const FlutterSecureStorage();
-  
+
   void _showDialog(String title, String message, {bool isSuccess = false}) {
     showDialog(
       context: context,
@@ -157,33 +154,22 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      //  AWS 포트 3000 운영 서버 주소 반영
-      final response = await http.post(
-        Uri.parse('http://?.?.?.?:3000/api/auth/signup'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': name,
-          'email': email,
-          'password': password,
-        }),
-      ).timeout(const Duration(seconds: 5));
+      final result = await AuthApiService.signup(
+        name: name,
+        email: email,
+        password: password,
+      );
+      appState.setAuthenticatedSession(result.user, displayName: name);
 
-      if (response.statusCode == 201) {
-        await _storage.write(key: 'login_platform', value: 'email');
-        await _storage.write(key: 'user_name', value: name);
-        await _storage.write(key: 'user_email', value: email);
-        
-        _showDialog(
-          '회원가입 완료', 
-          '회원가입이 완료되었습니다!\n로그인 화면으로 이동합니다.', 
-          isSuccess: true
-        );
-      } else {
-        final error = jsonDecode(response.body);
-        _showDialog('가입 실패', error['message'] ?? '다시 시도해주세요.');
-      }
-    } catch (e) {
-      _showDialog('연결 오류', '서버 연결에 실패했습니다. 네트워크 상태를 확인하세요.');
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      );
+    } on ApiException catch (e) {
+      _showDialog('회원가입 실패', e.message);
+    } catch (_) {
+      _showDialog('회원가입 실패', '회원가입 중 오류가 발생했습니다');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
